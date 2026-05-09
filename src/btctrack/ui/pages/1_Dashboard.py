@@ -37,11 +37,11 @@ else:
         var_name="series",
         value_name=f"{ccy}",
     )
-    chart = (
+    fiat_lines = (
         alt.Chart(long)
         .mark_line()
         .encode(
-            x="date:T",
+            x=alt.X("date:T", title="Date"),
             y=alt.Y(f"{ccy}:Q", title=ccy),
             color=alt.Color(
                 "series:N",
@@ -52,8 +52,20 @@ else:
                 legend=alt.Legend(title="Series"),
             ),
         )
-        .properties(height=320)
     )
+    btc_line = (
+        alt.Chart(df)
+        .mark_line(strokeDash=[4, 3], color="#f7931a")
+        .encode(
+            x="date:T",
+            y=alt.Y(
+                "holdings_btc:Q",
+                title="BTC",
+                axis=alt.Axis(titleColor="#f7931a", labelColor="#f7931a"),
+            ),
+        )
+    )
+    chart = alt.layer(fiat_lines, btc_line).resolve_scale(y="independent").properties(height=320)
     st.altair_chart(chart, use_container_width=True)
 
 st.subheader("Holdings per wallet")
