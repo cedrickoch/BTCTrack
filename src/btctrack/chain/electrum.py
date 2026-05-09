@@ -38,6 +38,28 @@ class ElectrumConfig:
     timeout: float = 30.0
 
 
+def script_type_from_address(address: str) -> str:
+    """Validate `address` and return the script type implied by its encoding.
+
+    Raises ValueError on unrecognised input. P2WSH (32-byte witness-v0 program)
+    is reported as ``p2wpkh`` because the Wallet.script_type column is
+    cosmetic for single-address imports — the on-chain matching uses the
+    address string itself, not the script type label.
+    """
+    script = _address_to_script_pubkey(address)
+    if script.startswith(b"\x00\x14"):
+        return "p2wpkh"
+    if script.startswith(b"\x00\x20"):
+        return "p2wpkh"
+    if script.startswith(b"\x51\x20"):
+        return "p2tr"
+    if script.startswith(b"\x76\xa9"):
+        return "p2pkh"
+    if script.startswith(b"\xa9"):
+        return "p2sh-p2wpkh"
+    raise ValueError(f"Unrecognised address: {address}")
+
+
 def address_to_scripthash(address: str) -> str:
     """Convert a BTC address to an Electrum scripthash (hex, big-endian-reversed).
 

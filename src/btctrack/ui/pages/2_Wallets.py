@@ -32,78 +32,126 @@ tab_single, tab_multisig = st.tabs(["Single key (xpub / address)", "Multisig"])
 
 # -------------------- single-key tab --------------------
 with tab_single:
-    st.caption(
-        "**Important for Sparrow users:** the script type below must match "
-        "Sparrow's *Script Type* (Settings → Script Type), **not** the prefix "
-        "of your extended key. Sparrow lets you toggle between `xpub`/`ypub`/"
-        "`zpub` formats independently of the script type, so the prefix is "
-        "unreliable. Pick the type your Sparrow wallet actually uses."
+    kind = st.radio(
+        "Kind",
+        ["xpub", "address"],
+        index=0,
+        horizontal=True,
+        key="single_kind",
+        help=(
+            "Pick **xpub** to import a whole account by extended public key. "
+            "Pick **address** when you only have a single receive address "
+            "(e.g. an old wallet whose xpub you no longer have)."
+        ),
     )
-    with st.form("add_single_form", clear_on_submit=False):
-        label = st.text_input("Label", placeholder="Cold storage", key="single_label")
-        kind = st.selectbox("Kind", ["xpub", "address"], index=0, key="single_kind")
-        value = st.text_input(
-            "Extended public key or BTC address",
-            placeholder="xpub… / ypub… / zpub… / 1… / 3… / bc1…",
-            key="single_value",
-        )
-        script_type = st.selectbox(
-            "Script type",
-            list(SCRIPT_TYPE_LABELS.keys()),
-            index=0,
-            format_func=lambda k: SCRIPT_TYPE_LABELS[k],
-            help=(
-                "Must match Sparrow's script type. Default is Native SegWit "
-                "(BIP84), Sparrow's default for new wallets."
-            ),
-            key="single_script_type",
-        )
-        gap_limit = st.number_input(
-            "Gap limit",
-            min_value=1,
-            max_value=200,
-            value=settings.gap_limit,
-            step=1,
-            key="single_gap",
-        )
-        c1, c2 = st.columns(2)
-        preview_clicked = c1.form_submit_button("Preview first 3 addresses")
-        submitted = c2.form_submit_button("Add wallet", type="primary")
 
-    if preview_clicked and kind == "xpub" and value.strip():
-        try:
-            preview = derive_chain(
-                value.strip(), script_type, "receive", count=3  # type: ignore[arg-type]
+    if kind == "xpub":
+        st.caption(
+            "**Important for Sparrow users:** the script type below must match "
+            "Sparrow's *Script Type* (Settings → Script Type), **not** the prefix "
+            "of your extended key. Sparrow lets you toggle between `xpub`/`ypub`/"
+            "`zpub` formats independently of the script type, so the prefix is "
+            "unreliable. Pick the type your Sparrow wallet actually uses."
+        )
+        with st.form("add_xpub_form", clear_on_submit=False):
+            label = st.text_input("Label", placeholder="Cold storage", key="xpub_label")
+            value = st.text_input(
+                "Extended public key",
+                placeholder="xpub… / ypub… / zpub…",
+                key="xpub_value",
             )
-            st.info(
-                "**Verify these match the first 3 receive addresses in Sparrow** "
-                "(Sparrow → Addresses tab). If they don't, change the script type."
+            script_type = st.selectbox(
+                "Script type",
+                list(SCRIPT_TYPE_LABELS.keys()),
+                index=0,
+                format_func=lambda k: SCRIPT_TYPE_LABELS[k],
+                help=(
+                    "Must match Sparrow's script type. Default is Native SegWit "
+                    "(BIP84), Sparrow's default for new wallets."
+                ),
+                key="xpub_script_type",
             )
-            st.code(
-                "\n".join(f"{i}: {a.address}" for i, a in enumerate(preview)),
-                language="text",
+            gap_limit = st.number_input(
+                "Gap limit",
+                min_value=1,
+                max_value=200,
+                value=settings.gap_limit,
+                step=1,
+                key="xpub_gap",
             )
-        except Exception as e:
-            st.error(f"Could not derive preview: {e}")
+            c1, c2 = st.columns(2)
+            preview_clicked = c1.form_submit_button("Preview first 3 addresses")
+            submitted = c2.form_submit_button("Add wallet", type="primary")
 
-    if submitted:
-        if not label.strip() or not value.strip():
-            st.error("Label and value are required.")
-        else:
+        if preview_clicked and value.strip():
             try:
-                wid = add_wallet(
-                    label=label.strip(),
-                    kind=kind,
-                    value=value.strip(),
-                    script_type=script_type,
-                    gap_limit=int(gap_limit),
+                preview = derive_chain(
+                    value.strip(), script_type, "receive", count=3  # type: ignore[arg-type]
                 )
-                st.success(
-                    f"Added wallet #{wid} as {SCRIPT_TYPE_LABELS[script_type]}. "
-                    "Run a sync from Settings."
+                st.info(
+                    "**Verify these match the first 3 receive addresses in Sparrow** "
+                    "(Sparrow → Addresses tab). If they don't, change the script type."
+                )
+                st.code(
+                    "\n".join(f"{i}: {a.address}" for i, a in enumerate(preview)),
+                    language="text",
                 )
             except Exception as e:
-                st.error(f"Could not add wallet: {e}")
+                st.error(f"Could not derive preview: {e}")
+
+        if submitted:
+            if not label.strip() or not value.strip():
+                st.error("Label and value are required.")
+            else:
+                try:
+                    wid = add_wallet(
+                        label=label.strip(),
+                        kind="xpub",
+                        value=value.strip(),
+                        script_type=script_type,
+                        gap_limit=int(gap_limit),
+                    )
+                    st.success(
+                        f"Added wallet #{wid} as {SCRIPT_TYPE_LABELS[script_type]}. "
+                        "Run a sync from Settings."
+                    )
+                except Exception as e:
+                    st.error(f"Could not add wallet: {e}")
+    else:
+        st.caption(
+            "Import a single mainnet BTC address. Use this when you only have "
+            "the address itself — for example, an older receive address whose "
+            "xpub you no longer have. Only this one address is tracked; the "
+            "wallet's other addresses won't be discovered."
+        )
+        with st.form("add_address_form", clear_on_submit=False):
+            addr_label = st.text_input(
+                "Label", placeholder="Old receive address", key="addr_label"
+            )
+            addr_value = st.text_input(
+                "BTC address",
+                placeholder="bc1q… / bc1p… / 3… / 1…",
+                key="addr_value",
+            )
+            addr_submitted = st.form_submit_button("Add address", type="primary")
+
+        if addr_submitted:
+            if not addr_label.strip() or not addr_value.strip():
+                st.error("Label and address are required.")
+            else:
+                try:
+                    wid = add_wallet(
+                        label=addr_label.strip(),
+                        kind="address",
+                        value=addr_value.strip(),
+                    )
+                    st.success(
+                        f"Added address wallet #{wid}. Run a sync from Settings."
+                    )
+                except ValueError as e:
+                    st.error(f"Invalid address: {e}")
+                except Exception as e:
+                    st.error(f"Could not add wallet: {e}")
 
 # -------------------- multisig tab --------------------
 with tab_multisig:

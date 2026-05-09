@@ -34,7 +34,12 @@ from btctrack.chain.derive import (
     DerivedAddress,
     derive_address,
 )
-from btctrack.chain.electrum import ElectrumClient, ElectrumConfig, script_to_address
+from btctrack.chain.electrum import (
+    ElectrumClient,
+    ElectrumConfig,
+    script_to_address,
+    script_type_from_address,
+)
 from btctrack.chain.multisig import (
     Multisig,
     derive_multisig_address,
@@ -484,7 +489,9 @@ def add_wallet(
             script_type = "p2wpkh"
         st = script_type
     elif kind == "address":
-        st = script_type or "p2wpkh"
+        # Script type is implied by the address encoding itself, so derive it
+        # rather than trusting the caller. This also validates the address.
+        st = script_type_from_address(value)
     elif kind == "multisig":
         # Validate the descriptor early so the user gets immediate feedback,
         # and pull the script type out of it for the wallet row.
