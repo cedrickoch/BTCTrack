@@ -57,4 +57,4 @@ with session_scope() as s:
 if not rows:
     st.info("No transactions yet. Add a wallet and run a sync.")
 else:
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width="stretch", hide_index=True)

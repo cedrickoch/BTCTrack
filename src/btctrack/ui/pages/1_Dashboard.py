@@ -66,7 +66,7 @@ else:
         )
     )
     chart = alt.layer(fiat_lines, btc_line).resolve_scale(y="independent").properties(height=320)
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 st.subheader("Holdings per wallet")
 balances = per_wallet_balances()
@@ -77,6 +77,6 @@ else:
         balances[["label", "btc", "sats"]].rename(
             columns={"label": "Wallet", "btc": "BTC", "sats": "sats"}
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )

@@ -256,7 +256,7 @@ with session_scope() as s:
 if not rows:
     st.info("No wallets yet — add one above.")
 else:
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width="stretch", hide_index=True)
     options = {f"#{r['id']} — {r['label']}": r["id"] for r in rows}
     pick = st.selectbox("Remove a wallet", ["—"] + list(options.keys()))
     if pick != "—":
