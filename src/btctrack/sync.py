@@ -2,15 +2,19 @@
 
 Pipeline:
 1. Load enabled wallets.
-2. For each xpub wallet: derive addresses up to gap_limit on both chains.
-3. Fetch histories for every owned address from Electrum (one connection).
-4. For new txids: fetch the verbose tx, dereference inputs to get prevout
-   addresses + amounts, persist tx + tx_io rows.
+2. For each xpub/multisig wallet: walk both chains in gap-limit-sized batches,
+   firing every history lookup in the batch in parallel and caching the
+   resulting histories so step 3 doesn't re-query them.
+3. Diff observed txids against the DB to find new ones.
+4. Ingest new txs concurrently. A single per-sync tx cache deduplicates the
+   verbose fetches needed to dereference prevouts (one RPC per txid even when
+   many vins share the same parent), and the resulting rows are flushed in
+   one batched commit instead of one commit per tx.
 5. Refresh every TxIO's owned/wallet_id against the current owned-address
    set, then reclassify every tx. Doing this on each sync — not only on
    ingest — means that adding a second wallet later promotes prior A→B
    transfers from external_out to internal.
-6. Fetch missing daily BTC/fiat prices from CoinGecko (cached).
+6. Fetch missing daily BTC/fiat prices from the bundled snapshot.
 7. Persist `last_sync_at` setting.
 
 The FIFO ledger itself is rebuilt on demand by `ledger.performance.current_state()`.
@@ -21,7 +25,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import Awaitable, Callable
 
 from sqlalchemy import select
 
@@ -29,19 +33,23 @@ from btctrack.chain.derive import (
     Chain,
     DerivedAddress,
     derive_address,
-    scan_chain_with_gap,
 )
 from btctrack.chain.electrum import ElectrumClient, ElectrumConfig, script_to_address
 from btctrack.chain.multisig import (
     Multisig,
+    derive_multisig_address,
     parse_descriptor,
-    scan_multisig_chain_with_gap,
 )
 from btctrack.config import get_settings
 from btctrack.db.models import Address, Setting, Transaction, TxIO, Wallet
 from btctrack.db.session import session_scope
 from btctrack.ledger.classify import IO, classify
 from btctrack.prices.snapshot import date_of, lookup_prices
+
+# Cap on in-flight RPCs over the single Electrum connection. aiorpcx
+# multiplexes JSON-RPC IDs over one socket so the cap is a courtesy to public
+# servers, not a transport limit.
+_RPC_CONCURRENCY = 20
 
 
 @dataclass
@@ -58,46 +66,75 @@ def _settings_to_electrum_cfg() -> ElectrumConfig:
     return ElectrumConfig(host=s.electrum_host, port=s.electrum_port, use_ssl=s.electrum_use_ssl)
 
 
+async def _gap_scan_parallel(
+    derive_at: Callable[[int], str],
+    chain_label: Chain,
+    fetch_history: Callable[[str], Awaitable[list[dict]]],
+    gap_limit: int,
+    histories: dict[str, list[dict]],
+    max_addresses: int = 10_000,
+) -> list[DerivedAddress]:
+    """Walk one chain in gap_limit-sized windows, fanning histories in parallel.
+
+    Stops the moment `gap_limit` consecutive empties are seen, matching the
+    serial scanner's address count exactly — only the dispatch shape changes.
+    Captured histories are stashed in `histories` so callers can reuse them
+    for txid discovery without a second round trip per address.
+    """
+    discovered: list[DerivedAddress] = []
+    consecutive_empty = 0
+    start = 0
+    while consecutive_empty < gap_limit and start < max_addresses:
+        end = min(start + gap_limit, max_addresses)
+        addrs = [derive_at(i) for i in range(start, end)]
+        results = await asyncio.gather(*(fetch_history(a) for a in addrs))
+        for offset, (addr, hist) in enumerate(zip(addrs, results)):
+            histories[addr] = hist
+            discovered.append(DerivedAddress(addr, chain_label, start + offset))
+            if hist:
+                consecutive_empty = 0
+            else:
+                consecutive_empty += 1
+                if consecutive_empty >= gap_limit:
+                    return discovered
+        start = end
+    return discovered
+
+
 async def _scan_xpub(
-    client: ElectrumClient,
+    fetch_history: Callable[[str], Awaitable[list[dict]]],
     xpub: str,
     script_type: str,
     gap_limit: int,
+    histories: dict[str, list[dict]],
 ) -> dict[Chain, list[DerivedAddress]]:
     out: dict[Chain, list[DerivedAddress]] = {"receive": [], "change": []}
     for chain in ("receive", "change"):
-        async def has_history(addr: str) -> bool:
-            hist = await client.get_history(addr)
-            return bool(hist)
-
-        out[chain] = await scan_chain_with_gap(
-            xpub=xpub,
-            script_type=script_type,  # type: ignore[arg-type]
-            chain=chain,  # type: ignore[arg-type]
-            has_history=has_history,
+        out[chain] = await _gap_scan_parallel(
+            derive_at=lambda i, c=chain: derive_address(xpub, script_type, c, i),  # type: ignore[arg-type]
+            chain_label=chain,  # type: ignore[arg-type]
+            fetch_history=fetch_history,
             gap_limit=gap_limit,
+            histories=histories,
         )
     return out
 
 
 async def _scan_multisig(
-    client: ElectrumClient,
+    fetch_history: Callable[[str], Awaitable[list[dict]]],
     descriptor: str,
     gap_limit: int,
+    histories: dict[str, list[dict]],
 ) -> dict[Chain, list[DerivedAddress]]:
-    """Scan both chains of a multisig wallet using the parsed descriptor."""
     ms: Multisig = parse_descriptor(descriptor)
     out: dict[Chain, list[DerivedAddress]] = {"receive": [], "change": []}
     for chain in ("receive", "change"):
-        async def has_history(addr: str) -> bool:
-            hist = await client.get_history(addr)
-            return bool(hist)
-
-        out[chain] = await scan_multisig_chain_with_gap(
-            ms=ms,
-            chain=chain,  # type: ignore[arg-type]
-            has_history=has_history,
+        out[chain] = await _gap_scan_parallel(
+            derive_at=lambda i, c=chain: derive_multisig_address(ms, c, i),  # type: ignore[arg-type]
+            chain_label=chain,  # type: ignore[arg-type]
+            fetch_history=fetch_history,
             gap_limit=gap_limit,
+            histories=histories,
         )
     return out
 
@@ -136,28 +173,22 @@ def _all_owned_addresses() -> dict[str, int]:
         }
 
 
-async def _ingest_tx(
-    client: ElectrumClient,
+def _build_tx(
     txid: str,
+    raw: dict,
+    vins: list[dict],
+    prev_txs: list[dict],
     owned: dict[str, int],
 ) -> tuple[Transaction, list[TxIO]]:
-    raw = await client.get_transaction(txid, verbose=True)
-
     block_time = None
     if raw.get("blocktime"):
         block_time = datetime.fromtimestamp(raw["blocktime"], tz=timezone.utc)
-    block_height = raw.get("height") or raw.get("confirmations") and None  # height not always present
+    block_height = raw.get("height") or raw.get("confirmations") and None
 
-    # Sum input value by dereferencing each prevout. For coinbase, skip.
     inputs: list[TxIO] = []
     total_in = 0
-    for vin in raw.get("vin", []):
-        if "coinbase" in vin:
-            continue
-        prev_txid = vin["txid"]
-        vout_idx = vin["vout"]
-        prev = await client.get_transaction(prev_txid, verbose=True)
-        prev_out = prev["vout"][vout_idx]
+    for vin, prev in zip(vins, prev_txs):
+        prev_out = prev["vout"][vin["vout"]]
         addr = _extract_addr(prev_out)
         amt_sats = int(round(float(prev_out["value"]) * 100_000_000))
         total_in += amt_sats
@@ -223,8 +254,10 @@ def reclassify_all() -> int:
     full chain resync) — it touches only local DB state.
     """
     current_owned = _all_owned_addresses()
+    changed = 0
     with session_scope() as s:
-        for io in s.execute(select(TxIO)).scalars():
+        all_ios = s.execute(select(TxIO)).scalars().all()
+        for io in all_ios:
             should_own = io.address is not None and io.address in current_owned
             new_wallet_id = current_owned.get(io.address) if io.address else None
             if io.owned != should_own:
@@ -232,15 +265,21 @@ def reclassify_all() -> int:
             if io.wallet_id != new_wallet_id:
                 io.wallet_id = new_wallet_id
 
-    changed = 0
-    with session_scope() as s:
+        # Group IOs by txid up front so reclassification doesn't trigger an
+        # N+1 lazy-load against `Transaction.ios`.
+        ios_by_txid: dict[str, list[TxIO]] = {}
+        for io in all_ios:
+            ios_by_txid.setdefault(io.txid, []).append(io)
+
         for t in s.execute(select(Transaction)).scalars().all():
-            ios = t.ios
+            ios = ios_by_txid.get(t.txid, [])
             inputs = [
-                IO(io.address, io.amount_sats, io.owned) for io in ios if io.direction == "in"
+                IO(io.address, io.amount_sats, io.owned)
+                for io in ios if io.direction == "in"
             ]
             outputs = [
-                IO(io.address, io.amount_sats, io.owned) for io in ios if io.direction == "out"
+                IO(io.address, io.amount_sats, io.owned)
+                for io in ios if io.direction == "out"
             ]
             res = classify(inputs, outputs)
             if t.classification != res.classification:
@@ -259,7 +298,29 @@ async def _do_sync() -> SyncResult:
     prices_filled = 0
 
     async with ElectrumClient(cfg) as client:
-        # 1. derive addresses
+        sem = asyncio.Semaphore(_RPC_CONCURRENCY)
+
+        async def fetch_history(addr: str) -> list[dict]:
+            async with sem:
+                return await client.get_history(addr)
+
+        async def fetch_tx_raw(txid: str) -> dict:
+            async with sem:
+                return await client.get_transaction(txid, verbose=True)
+
+        # Per-sync tx cache: every verbose-tx fetch (top-level or prevout)
+        # goes through this so two parallel ingests don't refetch the same
+        # tx, and a tx referenced as a prevout by N inputs costs one RPC.
+        tx_tasks: dict[str, "asyncio.Task[dict]"] = {}
+
+        def get_tx(txid: str) -> "asyncio.Task[dict]":
+            task = tx_tasks.get(txid)
+            if task is None:
+                task = asyncio.create_task(fetch_tx_raw(txid))
+                tx_tasks[txid] = task
+            return task
+
+        # 1. derive addresses while capturing per-address histories
         with session_scope() as s:
             wallets = s.execute(select(Wallet)).scalars().all()
             wallet_count = len(wallets)
@@ -267,15 +328,21 @@ async def _do_sync() -> SyncResult:
                 (w.id, w.kind, w.value, w.script_type, w.gap_limit) for w in wallets
             ]
 
+        histories: dict[str, list[dict]] = {}
         for wallet_id, kind, value, script_type, gap_limit in wallet_specs:
             if kind == "xpub":
-                derived = await _scan_xpub(client, value, script_type, gap_limit)
+                derived = await _scan_xpub(
+                    fetch_history, value, script_type, gap_limit, histories
+                )
                 addresses_added += _persist_addresses(wallet_id, derived)
             elif kind == "multisig":
-                derived = await _scan_multisig(client, value, gap_limit)
+                derived = await _scan_multisig(
+                    fetch_history, value, gap_limit, histories
+                )
                 addresses_added += _persist_addresses(wallet_id, derived)
             else:
-                # single address — ensure row exists
+                # single address — ensure row exists, then fetch its history
+                # once so step 2 reuses the same cache.
                 with session_scope() as s:
                     existing = s.execute(
                         select(Address).where(
@@ -293,33 +360,45 @@ async def _do_sync() -> SyncResult:
                             )
                         )
                         addresses_added += 1
+                if value not in histories:
+                    histories[value] = await fetch_history(value)
 
-        # 2. histories → discover txids
+        # 2. histories → discover txids (no second round of RPCs)
         owned = _all_owned_addresses()
         seen_txids: set[str] = set()
-        for addr in owned.keys():
-            hist = await client.get_history(addr)
-            for h in hist:
+        missing = [a for a in owned if a not in histories]
+        if missing:
+            # Addresses already in the DB from a previous sync that weren't
+            # re-derived this run (e.g. wallet removed, address row left over)
+            # still need their history pulled.
+            extra = await asyncio.gather(*(fetch_history(a) for a in missing))
+            for addr, hist in zip(missing, extra):
+                histories[addr] = hist
+        for addr in owned:
+            for h in histories.get(addr, []):
                 seen_txids.add(h["tx_hash"])
 
-        # 3. ingest new txs
-        with session_scope() as s:
-            existing_txids = {
-                t.txid for t in s.execute(select(Transaction.txid)).all()
-            }  # type: ignore[misc]
-        # The above is awkward (Result rows of strings). Re-query cleanly:
+        # 3. ingest new txs concurrently, batched into a single commit
         with session_scope() as s:
             existing_txids = {
                 row[0] for row in s.execute(select(Transaction.txid)).all()
             }
         to_fetch = sorted(seen_txids - existing_txids)
-        for txid in to_fetch:
-            tx, ios = await _ingest_tx(client, txid, owned)
+
+        if to_fetch:
+            async def ingest_one(txid: str) -> tuple[Transaction, list[TxIO]]:
+                raw = await get_tx(txid)
+                vins = [v for v in raw.get("vin", []) if "coinbase" not in v]
+                prev_txs = await asyncio.gather(*(get_tx(v["txid"]) for v in vins))
+                return _build_tx(txid, raw, vins, prev_txs, owned)
+
+            ingested = await asyncio.gather(*(ingest_one(t) for t in to_fetch))
             with session_scope() as s:
-                s.add(tx)
-                for io in ios:
-                    s.add(io)
-            new_txs += 1
+                for tx, ios in ingested:
+                    s.add(tx)
+                    for io in ios:
+                        s.add(io)
+            new_txs = len(ingested)
 
     # 4. refresh TxIO ownership against the *current* owned-address set, then
     # reclassify every tx. Without the refresh, IOs ingested before a wallet
@@ -328,7 +407,7 @@ async def _do_sync() -> SyncResult:
     # are known. Reclassifying every tx every sync is cheap and idempotent.
     classified += reclassify_all()
 
-    # 5. fetch prices for external txs missing one
+    # 5. fill missing prices for external txs from the bundled snapshot
     with session_scope() as s:
         ext = s.execute(
             select(Transaction).where(
@@ -337,18 +416,9 @@ async def _do_sync() -> SyncResult:
                 Transaction.block_time.is_not(None),
             )
         ).scalars().all()
-        dates = sorted({date_of(t.block_time) for t in ext if t.block_time})
-
-    if dates:
-        prices = lookup_prices(dates, settings.base_currency)
-        with session_scope() as s:
-            ext = s.execute(
-                select(Transaction).where(
-                    Transaction.classification.in_(("external_in", "external_out")),
-                    Transaction.btc_price_fiat.is_(None),
-                    Transaction.block_time.is_not(None),
-                )
-            ).scalars().all()
+        if ext:
+            dates = sorted({date_of(t.block_time) for t in ext if t.block_time})
+            prices = lookup_prices(dates, settings.base_currency) if dates else {}
             for t in ext:
                 d = date_of(t.block_time)  # type: ignore[arg-type]
                 if d in prices:
