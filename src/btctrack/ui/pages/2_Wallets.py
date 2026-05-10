@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
@@ -9,8 +10,10 @@ from btctrack.config import get_settings
 from btctrack.db.models import Address, TxIO, Wallet
 from btctrack.db.session import session_scope
 from btctrack.sync import add_wallet, remove_wallet
+from btctrack.ui.privacy import mask_dataframe, render_sidebar_lock
 
 st.set_page_config(page_title="BTCTrack — Wallets", page_icon="₿", layout="wide")
+render_sidebar_lock()
 st.title("Wallets")
 
 settings = get_settings()
@@ -256,7 +259,15 @@ with session_scope() as s:
 if not rows:
     st.info("No wallets yet — add one above.")
 else:
-    st.dataframe(rows, width="stretch", hide_index=True)
+    st.dataframe(
+        mask_dataframe(
+            pd.DataFrame(rows),
+            btc_cols=("balance_btc",),
+            sats_cols=("balance_sats",),
+        ),
+        width="stretch",
+        hide_index=True,
+    )
     options = {f"#{r['id']} — {r['label']}": r["id"] for r in rows}
     pick = st.selectbox("Remove a wallet", ["—"] + list(options.keys()))
     if pick != "—":

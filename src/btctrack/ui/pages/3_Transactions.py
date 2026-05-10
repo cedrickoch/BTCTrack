@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
 from btctrack.db.models import Transaction, TxIO, Wallet
 from btctrack.db.session import session_scope
+from btctrack.ui.privacy import mask_dataframe, render_sidebar_lock
 
 st.set_page_config(page_title="BTCTrack — Transactions", page_icon="₿", layout="wide")
+render_sidebar_lock()
 st.title("Transactions")
 
 CLASS_BADGES = {
@@ -57,4 +60,13 @@ with session_scope() as s:
 if not rows:
     st.info("No transactions yet. Add a wallet and run a sync.")
 else:
-    st.dataframe(rows, width="stretch", hide_index=True)
+    st.dataframe(
+        mask_dataframe(
+            pd.DataFrame(rows),
+            btc_cols=("net_btc",),
+            sats_cols=("fee_sats",),
+            fiat_cols=("btc_price", "fiat_value"),
+        ),
+        width="stretch",
+        hide_index=True,
+    )

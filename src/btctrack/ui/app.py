@@ -7,10 +7,12 @@ import streamlit as st
 from btctrack.config import get_settings
 from btctrack.db.session import get_engine
 from btctrack.sync import get_last_sync
+from btctrack.ui.privacy import render_sidebar_lock
 
 
 def main() -> None:
     st.set_page_config(page_title="BTCTrack", page_icon="₿", layout="wide")
+    render_sidebar_lock()
     settings = get_settings()
     # Trigger DB init
     get_engine()

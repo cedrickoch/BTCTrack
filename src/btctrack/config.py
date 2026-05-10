@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     btctrack_db_path: Path = Field(default=Path("data/btctrack.db"))
 
+    mask_password_hash: str | None = None
+
     @property
     def db_url(self) -> str:
         path = Path(self.btctrack_db_path).expanduser().resolve()

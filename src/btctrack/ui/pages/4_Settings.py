@@ -4,8 +4,10 @@ import streamlit as st
 
 from btctrack.config import get_settings
 from btctrack.sync import get_last_sync, run_sync
+from btctrack.ui.privacy import is_feature_enabled, render_sidebar_lock
 
 st.set_page_config(page_title="BTCTrack — Settings", page_icon="₿", layout="wide")
+render_sidebar_lock()
 st.title("Settings")
 
 settings = get_settings()
@@ -19,6 +21,7 @@ st.write(
         "BASE_CURRENCY": settings.base_currency,
         "GAP_LIMIT": settings.gap_limit,
         "BTCTRACK_DB_PATH": str(settings.btctrack_db_path),
+        "MASK_PASSWORD_HASH": "set" if is_feature_enabled() else "unset",
     }
 )
 st.caption(

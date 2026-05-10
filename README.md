@@ -93,6 +93,24 @@ the build outside Docker:
   publishes port 8501 to your LAN. To expose it remotely, terminate TLS in front
   (Caddy, Traefik, Tailscale) — there is no built-in auth.
 
+## Privacy mode (mask values)
+
+All fiat amounts, BTC/sat amounts, and the Dashboard chart can be hidden behind
+a password. A lock widget appears in the Streamlit sidebar; the app starts
+**masked on every reload** and stays unlocked only for the current browser
+session.
+
+Set up:
+
+```
+python scripts/hash_mask_password.py
+# enter + confirm password → copy the printed line into .env
+# MASK_PASSWORD_HASH=$2b$12$....
+```
+
+Then restart the app. Leaving `MASK_PASSWORD_HASH` unset disables the feature
+entirely (no sidebar widget, no masking).
+
 ## End-to-end manual verification
 
 1. `docker compose up --build`, open `http://localhost:8501`.
