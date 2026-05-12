@@ -18,6 +18,7 @@ dependencies = [
     "pandas>=2.2",
     "altair>=5.3",
     "bcrypt>=4",
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

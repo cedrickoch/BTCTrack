@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import streamlit as st
 
+from btctrack import backup
 from btctrack.config import get_settings
 from btctrack.sync import get_last_sync, run_sync
 from btctrack.ui.privacy import is_feature_enabled, render_sidebar_lock
@@ -9,6 +12,11 @@ from btctrack.ui.privacy import is_feature_enabled, render_sidebar_lock
 st.set_page_config(page_title="BTCTrack — Settings", page_icon="₿", layout="wide")
 render_sidebar_lock()
 st.title("Settings")
+
+# Flash a one-shot success banner that was set right before an st.rerun().
+_FLASH_KEY = "_btctrack_flash_success"
+if _flash := st.session_state.pop(_FLASH_KEY, None):
+    st.success(_flash)
 
 settings = get_settings()
 
@@ -47,3 +55,103 @@ if st.button("Run sync now", type="primary"):
         except Exception as e:
             st.error(f"Sync failed: {e}")
             st.exception(e)
+
+st.divider()
+st.subheader("Export data")
+st.caption(
+    "Take a snapshot of the current database — wallets, addresses, transactions, "
+    "lots, realised gains, settings — for migrating to another host or for offline "
+    "backup."
+)
+
+_EXPORT_KEY = "_btctrack_export_bytes"
+_EXPORT_NAME_KEY = "_btctrack_export_filename"
+
+encrypt = st.checkbox(
+    "Encrypt with passphrase",
+    value=True,
+    help=(
+        "Encrypted backups protect xpubs in transit (USB stick, scp, cloud). "
+        "Uncheck only if you're moving the file over a fully trusted channel "
+        "and want a raw SQLite file you can open with sqlite3."
+    ),
+)
+exp_pw1 = exp_pw2 = ""
+if encrypt:
+    c1, c2 = st.columns(2)
+    exp_pw1 = c1.text_input("Passphrase", type="password", key="_btctrack_exp_pw1")
+    exp_pw2 = c2.text_input("Confirm passphrase", type="password", key="_btctrack_exp_pw2")
+
+if st.button("Prepare export"):
+    st.session_state.pop(_EXPORT_KEY, None)
+    st.session_state.pop(_EXPORT_NAME_KEY, None)
+    if encrypt and not exp_pw1:
+        st.error("Passphrase is required when encrypting.")
+    elif encrypt and exp_pw1 != exp_pw2:
+        st.error("Passphrases do not match.")
+    else:
+        try:
+            data = backup.export_bytes(exp_pw1 if encrypt else None)
+        except Exception as e:  # pragma: no cover — UI error path
+            st.error(f"Export failed: {e}")
+        else:
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            suffix = "btctrk.enc" if encrypt else "btctrk"
+            st.session_state[_EXPORT_KEY] = data
+            st.session_state[_EXPORT_NAME_KEY] = f"btctrack-{ts}.{suffix}"
+            st.success(f"Ready: {len(data):,} bytes. Click the download button below.")
+
+if _EXPORT_KEY in st.session_state:
+    st.download_button(
+        "Download backup",
+        data=st.session_state[_EXPORT_KEY],
+        file_name=st.session_state[_EXPORT_NAME_KEY],
+        mime="application/octet-stream",
+        type="primary",
+    )
+
+st.divider()
+st.subheader("Import data")
+st.warning(
+    "**Import replaces ALL current data.** Your current database is moved to "
+    "`btctrack.db.bak` first so you can recover it manually if needed."
+)
+
+uploaded = st.file_uploader(
+    "Backup file",
+    type=["btctrk", "enc"],
+    accept_multiple_files=False,
+    help="A `.btctrk` (raw) or `.btctrk.enc` (encrypted) file produced by Export.",
+)
+imp_pw = ""
+needs_pw = False
+if uploaded is not None:
+    raw_bytes = uploaded.getvalue()
+    needs_pw = backup.is_encrypted(raw_bytes)
+    if needs_pw:
+        imp_pw = st.text_input(
+            "Passphrase", type="password", key="_btctrack_imp_pw"
+        )
+    else:
+        st.info("File is not encrypted — no passphrase needed.")
+
+if st.button("Import", type="primary", disabled=uploaded is None):
+    if needs_pw and not imp_pw:
+        st.error("This backup is encrypted; enter the passphrase.")
+    else:
+        try:
+            res = backup.import_bytes(
+                uploaded.getvalue(),  # type: ignore[union-attr]
+                imp_pw if needs_pw else None,
+            )
+        except backup.BackupError as e:
+            st.error(f"Import failed: {e}")
+        except Exception as e:  # pragma: no cover — defensive
+            st.error(f"Import failed: {e}")
+        else:
+            st.session_state[_FLASH_KEY] = (
+                f"Import successful — {res.wallets} wallets · "
+                f"{res.addresses} addresses · {res.transactions} transactions "
+                "restored. Previous database moved to btctrack.db.bak."
+            )
+            st.rerun()

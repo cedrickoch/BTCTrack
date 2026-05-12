@@ -111,6 +111,23 @@ python scripts/hash_mask_password.py
 Then restart the app. Leaving `MASK_PASSWORD_HASH` unset disables the feature
 entirely (no sidebar widget, no masking).
 
+## Migrating between hosts
+
+Settings → **Export data** snapshots the SQLite DB (wallets, addresses,
+transactions, lots, realised gains, settings) into a single file.
+
+- Default mode is **encrypted with a passphrase** (AES-256-GCM, PBKDF2-HMAC-SHA256
+  with 600k iterations). Use this whenever the file leaves the host — USB stick,
+  scp, cloud sync — since it contains your xpubs.
+- Uncheck the encryption box for a raw `.btctrk` file (the SQLite bytes with an
+  8-byte header). Useful only for local debugging.
+
+On the destination host, Settings → **Import data**, upload the file, enter the
+passphrase. The current DB is moved to `btctrack.db.bak` before the swap, and
+the import is rejected (live DB untouched) if the passphrase is wrong, the file
+is tampered with, or the schema doesn't match. `.env` is **not** migrated —
+re-edit it on the new host for that machine's Electrum endpoint.
+
 ## End-to-end manual verification
 
 1. `docker compose up --build`, open `http://localhost:8501`.
