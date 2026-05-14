@@ -520,6 +520,17 @@ def remove_wallet(wallet_id: int) -> None:
             s.delete(w)
 
 
+def rename_wallet(wallet_id: int, new_label: str) -> None:
+    label = new_label.strip()
+    if not label:
+        raise ValueError("Label cannot be empty.")
+    with session_scope() as s:
+        w = s.get(Wallet, wallet_id)
+        if not w:
+            raise ValueError(f"Wallet #{wallet_id} not found.")
+        w.label = label
+
+
 def get_last_sync() -> datetime | None:
     with session_scope() as s:
         row = s.get(Setting, "last_sync_at")

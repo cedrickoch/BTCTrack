@@ -9,7 +9,7 @@ from btctrack.chain.multisig import derive_multisig_address, parse_descriptor
 from btctrack.config import get_settings
 from btctrack.db.models import Address, TxIO, Wallet
 from btctrack.db.session import session_scope
-from btctrack.sync import add_wallet, remove_wallet
+from btctrack.sync import add_wallet, remove_wallet, rename_wallet
 from btctrack.ui.privacy import mask_dataframe, render_sidebar_lock
 
 st.set_page_config(page_title="BTCTrack — Wallets", page_icon="₿", layout="wide")
@@ -269,8 +269,35 @@ else:
         hide_index=True,
     )
     options = {f"#{r['id']} — {r['label']}": r["id"] for r in rows}
-    pick = st.selectbox("Remove a wallet", ["—"] + list(options.keys()))
-    if pick != "—":
-        if st.button("Remove (cascades addresses)", type="primary"):
-            remove_wallet(options[pick])
-            st.success("Removed. Reload page.")
+    labels_by_id = {r["id"]: r["label"] for r in rows}
+
+    col_rename, col_remove = st.columns(2)
+
+    with col_rename:
+        st.markdown("**Rename a wallet**")
+        rename_pick = st.selectbox(
+            "Wallet to rename", ["—"] + list(options.keys()), key="rename_pick"
+        )
+        if rename_pick != "—":
+            wid = options[rename_pick]
+            with st.form("rename_wallet_form", clear_on_submit=False):
+                new_label = st.text_input(
+                    "New label", value=labels_by_id[wid], key="rename_new_label"
+                )
+                rename_submitted = st.form_submit_button("Save label", type="primary")
+            if rename_submitted:
+                try:
+                    rename_wallet(wid, new_label)
+                    st.success("Renamed. Reload page.")
+                except ValueError as e:
+                    st.error(str(e))
+
+    with col_remove:
+        st.markdown("**Remove a wallet**")
+        pick = st.selectbox(
+            "Wallet to remove", ["—"] + list(options.keys()), key="remove_pick"
+        )
+        if pick != "—":
+            if st.button("Remove (cascades addresses)", type="primary"):
+                remove_wallet(options[pick])
+                st.success("Removed. Reload page.")
