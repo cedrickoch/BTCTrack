@@ -12,15 +12,13 @@ Currency = Literal["CHF", "EUR", "USD"]
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
 
-    electrum_host: str = "127.0.0.1"
-    electrum_port: int = 50002
-    electrum_use_ssl: bool = True
+    electrum_host: str = "electrs"
+    electrum_port: int = 50001
+    electrum_use_ssl: bool = False
 
     base_currency: Currency = "CHF"
     gap_limit: int = 20

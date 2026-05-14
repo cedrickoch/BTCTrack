@@ -32,8 +32,9 @@ st.write(
     }
 )
 st.caption(
-    "Edit `.env` and restart the container to change these. The app intentionally "
-    "does not write env vars at runtime."
+    "Set these as environment variables on the container (see `docker-compose.yml`) "
+    "and restart to change them. The app intentionally does not write env vars at "
+    "runtime."
 )
 
 st.divider()

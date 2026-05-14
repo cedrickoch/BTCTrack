@@ -22,11 +22,15 @@ Python 3.12 · Streamlit · SQLAlchemy · aiorpcx (Electrum) · bip-utils · bun
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env
-$EDITOR .env                       # set ELECTRUM_HOST, ELECTRUM_PORT, BASE_CURRENCY
 docker compose up --build -d
 open http://localhost:8501
 ```
+
+It runs on sensible defaults out of the box. To point at your own Electrum
+server (or change the base currency / gap limit), set the matching variable in
+your shell before `docker compose up` — e.g. `ELECTRUM_HOST=bitcoin
+ELECTRUM_PORT=50001 docker compose up -d` — or edit the `environment:` block in
+`docker-compose.yml`.
 
 The build step downloads the daily BTC/USD history from Bitstamp's public
 OHLC API and the daily USD→EUR / USD→CHF rates from Frankfurter (ECB
@@ -45,10 +49,11 @@ In the UI:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env
-export $(grep -v '^#' .env | xargs)
 streamlit run src/btctrack/ui/app.py
 ```
+
+Runs on defaults; prefix any setting as an env var to override, e.g.
+`ELECTRUM_HOST=bitcoin streamlit run src/btctrack/ui/app.py`.
 
 ## Tests
 
@@ -119,8 +124,9 @@ transactions, lots, realised gains, settings) into a single file.
 On the destination host, Settings → **Import data**, upload the file, enter the
 passphrase. The current DB is moved to `btctrack.db.bak` before the swap, and
 the import is rejected (live DB untouched) if the passphrase is wrong, the file
-is tampered with, or the schema doesn't match. `.env` is **not** migrated —
-re-edit it on the new host for that machine's Electrum endpoint.
+is tampered with, or the schema doesn't match. Runtime config (Electrum
+endpoint, base currency, …) lives in environment variables, not the DB — set
+them on the new host for that machine's Electrum endpoint.
 
 ## End-to-end manual verification
 

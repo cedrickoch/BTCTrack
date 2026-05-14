@@ -5,7 +5,14 @@ services:
     restart: unless-stopped
     ports:
       - "8501:8501"
-    env_file:
-      - .env
+    # Runtime config — every value has a default, override by setting the var
+    # in your shell before `docker compose up`. BTCTRACK_DB_PATH is baked into
+    # the image (Dockerfile) and tied to the ./data volume mount below.
+    environment:
+      ELECTRUM_HOST: ${ELECTRUM_HOST:-electrs}
+      ELECTRUM_PORT: ${ELECTRUM_PORT:-50001}
+      ELECTRUM_USE_SSL: ${ELECTRUM_USE_SSL:-false}
+      BASE_CURRENCY: ${BASE_CURRENCY:-CHF}
+      GAP_LIMIT: ${GAP_LIMIT:-20}
     volumes:
       - ./data:/app/data
