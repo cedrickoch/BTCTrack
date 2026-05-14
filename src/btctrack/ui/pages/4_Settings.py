@@ -7,7 +7,7 @@ import streamlit as st
 from btctrack import backup
 from btctrack.config import get_settings
 from btctrack.sync import get_last_sync, run_sync
-from btctrack.ui.privacy import is_feature_enabled, render_sidebar_lock
+from btctrack.ui.privacy import is_feature_enabled, render_sidebar_lock, set_password
 
 st.set_page_config(page_title="BTCTrack — Settings", page_icon="₿", layout="wide")
 render_sidebar_lock()
@@ -29,13 +29,48 @@ st.write(
         "BASE_CURRENCY": settings.base_currency,
         "GAP_LIMIT": settings.gap_limit,
         "BTCTRACK_DB_PATH": str(settings.btctrack_db_path),
-        "MASK_PASSWORD_HASH": "set" if is_feature_enabled() else "unset",
     }
 )
 st.caption(
     "Edit `.env` and restart the container to change these. The app intentionally "
     "does not write env vars at runtime."
 )
+
+st.divider()
+st.subheader("Privacy mode")
+
+if is_feature_enabled():
+    st.success("🔒 Privacy mode is active.")
+    st.caption(
+        "A password is set. Fiat and BTC values are masked until you unlock them "
+        "from the sidebar. The password cannot be changed, shown, or removed here — "
+        "it is stored in the database and travels with backups."
+    )
+else:
+    st.caption(
+        "Set a password to mask fiat and BTC values until unlocked. Optional — leave "
+        "unset to keep all values visible. Once set, the password cannot be changed "
+        "or removed from the UI."
+    )
+    with st.form("_btctrack_set_privacy_pw"):
+        _pw1 = st.text_input("New password", type="password")
+        _pw2 = st.text_input("Confirm password", type="password")
+        _pw_submitted = st.form_submit_button("Set password", type="primary")
+    if _pw_submitted:
+        if not _pw1:
+            st.error("Password cannot be empty.")
+        elif _pw1 != _pw2:
+            st.error("Passwords do not match.")
+        elif len(_pw1) < 8:
+            st.error("Password must be at least 8 characters.")
+        else:
+            try:
+                set_password(_pw1)
+            except ValueError as e:
+                st.error(str(e))
+            else:
+                st.session_state[_FLASH_KEY] = "Privacy mode enabled."
+                st.rerun()
 
 st.divider()
 st.subheader("Sync")

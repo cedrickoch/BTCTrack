@@ -100,16 +100,10 @@ a password. A lock widget appears in the Streamlit sidebar; the app starts
 **masked on every reload** and stays unlocked only for the current browser
 session.
 
-Set up:
-
-```
-python scripts/hash_mask_password.py
-# enter + confirm password → copy the printed line into .env
-# MASK_PASSWORD_HASH=$2b$12$....
-```
-
-Then restart the app. Leaving `MASK_PASSWORD_HASH` unset disables the feature
-entirely (no sidebar widget, no masking).
+Set up: go to **Settings → Privacy mode** and set a password. The bcrypt hash is
+stored in the database (and travels with backups). The password is **immutable**
+once set — it cannot be changed, shown, or removed from the UI. Leaving it unset
+disables the feature entirely (no sidebar widget, no masking).
 
 ## Migrating between hosts
 
