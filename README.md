@@ -37,12 +37,12 @@ OHLC API and the daily USD→EUR / USD→CHF rates from Frankfurter (ECB
 reference rates). Both are free and require no account. The CSV is baked
 into the image; the running container never calls out for prices.
 
-In the UI:
+In the UI (runtime config — Electrum host, base currency, … — comes from
+environment variables, see `docker-compose.yml`; there is no in-app config):
 
-1. **Settings** → confirm Electrum host / base currency, save.
-2. **Wallets** → add an `xpub` (label it, pick script type, default gap limit 20) or a single address.
-3. Click **Run sync** on the Settings page (or the dashboard banner).
-4. **Dashboard** shows total BTC, current fiat value, open-lot cost basis, unrealised + realised P&L, and a value-vs-cost-basis chart. **Transactions** lists every tx with a classification badge (`internal` / `external_in` / `external_out` / `unknown`).
+1. **Wallets** → add an `xpub` (label it, pick script type, default gap limit 20) or a single address.
+2. Click **Run sync** on the Settings page.
+3. **Dashboard** shows total BTC, current fiat value, open-lot cost basis, unrealised + realised P&L, and a value-vs-cost-basis chart. **Transactions** lists every tx with a classification badge (`internal` / `external_in` / `external_out` / `unknown`).
 
 ## Quick start (bare Python, dev)
 
@@ -130,14 +130,13 @@ them on the new host for that machine's Electrum endpoint.
 
 ## End-to-end manual verification
 
-1. `docker compose up --build`, open `http://localhost:8501`.
-2. Settings → point at your Electrum server, choose CHF, save.
-3. Wallets → add a known cold-storage `zpub` and a hot-wallet single address.
-4. Settings → **Run sync**. Then check:
+1. Set `ELECTRUM_HOST` / `BASE_CURRENCY=CHF` (see `docker-compose.yml`), `docker compose up --build`, open `http://localhost:8501`.
+2. Wallets → add a known cold-storage `zpub` and a hot-wallet single address.
+3. Settings → **Run sync**. Then check:
    - Transactions: a historical exchange withdrawal appears as `external_in` with the correct CHF cost basis at the block date.
    - A self-transfer cold→hot is `internal` and does **not** show up in realised/unrealised P&L.
    - A spend to a third party is `external_out` and emits a `realized_gain` row.
-5. Dashboard total BTC equals the sum of wallet balances; the chart starts at the first `external_in`.
+4. Dashboard total BTC equals the sum of wallet balances; the chart starts at the first `external_in`.
 
 ## Out of scope (planned follow-ups)
 

@@ -1,38 +1,31 @@
-"""Streamlit entrypoint. Pages are auto-loaded from `pages/`."""
+"""Streamlit entrypoint.
+
+Navigation is declared explicitly with ``st.navigation`` so the entrypoint
+script itself doesn't show up as its own "app" page in the sidebar — the app
+opens directly on the Dashboard.
+"""
 
 from __future__ import annotations
 
 import streamlit as st
 
-from btctrack.config import get_settings
 from btctrack.db.session import get_engine
-from btctrack.sync import get_last_sync
-from btctrack.ui.privacy import render_sidebar_lock
 
 
 def main() -> None:
     st.set_page_config(page_title="BTCTrack", page_icon="₿", layout="wide")
-    render_sidebar_lock()
-    settings = get_settings()
-    # Trigger DB init
+    # Trigger DB init before any page queries run.
     get_engine()
 
-    st.title("BTCTrack")
-    st.caption("Self-hosted, privacy-preserving Bitcoin portfolio tracker")
-
-    last = get_last_sync()
-    cols = st.columns(3)
-    cols[0].metric("Base currency", settings.base_currency)
-    cols[1].metric("Electrum host", f"{settings.electrum_host}:{settings.electrum_port}")
-    cols[2].metric(
-        "Last sync",
-        last.strftime("%Y-%m-%d %H:%M") if last else "never",
+    nav = st.navigation(
+        [
+            st.Page("pages/1_Dashboard.py", title="Dashboard", default=True),
+            st.Page("pages/2_Wallets.py", title="Wallets"),
+            st.Page("pages/3_Transactions.py", title="Transactions"),
+            st.Page("pages/4_Settings.py", title="Settings"),
+        ]
     )
-
-    st.info(
-        "Use the sidebar to navigate. Add wallets in **Wallets**, then run a sync from "
-        "**Settings** to populate the dashboard."
-    )
+    nav.run()
 
 
 if __name__ == "__main__":

@@ -14,7 +14,6 @@ from btctrack.ui.privacy import (
     render_sidebar_lock,
 )
 
-st.set_page_config(page_title="BTCTrack — Dashboard", page_icon="₿", layout="wide")
 render_sidebar_lock()
 st.title("Dashboard")
 

@@ -8,7 +8,6 @@ from btctrack.db.models import Transaction, TxIO, Wallet
 from btctrack.db.session import session_scope
 from btctrack.ui.privacy import mask_dataframe, render_sidebar_lock
 
-st.set_page_config(page_title="BTCTrack — Transactions", page_icon="₿", layout="wide")
 render_sidebar_lock()
 st.title("Transactions")
 

@@ -5,11 +5,9 @@ from datetime import datetime
 import streamlit as st
 
 from btctrack import backup
-from btctrack.config import get_settings
 from btctrack.sync import get_last_sync, run_sync
 from btctrack.ui.privacy import is_feature_enabled, render_sidebar_lock, set_password
 
-st.set_page_config(page_title="BTCTrack — Settings", page_icon="₿", layout="wide")
 render_sidebar_lock()
 st.title("Settings")
 
@@ -18,26 +16,6 @@ _FLASH_KEY = "_btctrack_flash_success"
 if _flash := st.session_state.pop(_FLASH_KEY, None):
     st.success(_flash)
 
-settings = get_settings()
-
-st.subheader("Configuration (from environment)")
-st.write(
-    {
-        "ELECTRUM_HOST": settings.electrum_host,
-        "ELECTRUM_PORT": settings.electrum_port,
-        "ELECTRUM_USE_SSL": settings.electrum_use_ssl,
-        "BASE_CURRENCY": settings.base_currency,
-        "GAP_LIMIT": settings.gap_limit,
-        "BTCTRACK_DB_PATH": str(settings.btctrack_db_path),
-    }
-)
-st.caption(
-    "Set these as environment variables on the container (see `docker-compose.yml`) "
-    "and restart to change them. The app intentionally does not write env vars at "
-    "runtime."
-)
-
-st.divider()
 st.subheader("Privacy mode")
 
 if is_feature_enabled():

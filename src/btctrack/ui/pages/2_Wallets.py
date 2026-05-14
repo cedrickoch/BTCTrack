@@ -12,7 +12,6 @@ from btctrack.db.session import session_scope
 from btctrack.sync import add_wallet, remove_wallet, rename_wallet
 from btctrack.ui.privacy import mask_dataframe, render_sidebar_lock
 
-st.set_page_config(page_title="BTCTrack — Wallets", page_icon="₿", layout="wide")
 render_sidebar_lock()
 st.title("Wallets")
 
