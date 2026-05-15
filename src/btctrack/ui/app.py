@@ -1,8 +1,10 @@
 """Streamlit entrypoint.
 
-Navigation is declared explicitly with ``st.navigation`` so the entrypoint
-script itself doesn't show up as its own "app" page in the sidebar — the app
-opens directly on the Dashboard.
+Navigation is declared explicitly with ``st.navigation``. The page files live
+in ``views/`` rather than ``pages/`` on purpose: a directory literally named
+``pages/`` next to the entrypoint triggers Streamlit's automatic multi-page
+discovery, which runs in addition to ``st.navigation`` and re-introduces the
+entrypoint as an "app" item in the sidebar.
 """
 
 from __future__ import annotations
@@ -19,10 +21,10 @@ def main() -> None:
 
     nav = st.navigation(
         [
-            st.Page("pages/1_Dashboard.py", title="Dashboard", default=True),
-            st.Page("pages/2_Wallets.py", title="Wallets"),
-            st.Page("pages/3_Transactions.py", title="Transactions"),
-            st.Page("pages/4_Settings.py", title="Settings"),
+            st.Page("views/1_Dashboard.py", title="Dashboard", default=True),
+            st.Page("views/2_Wallets.py", title="Wallets"),
+            st.Page("views/3_Transactions.py", title="Transactions"),
+            st.Page("views/4_Settings.py", title="Settings"),
         ]
     )
     nav.run()
