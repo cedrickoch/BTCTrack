@@ -32,7 +32,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-btctrack = ["prices/data/*.csv"]
+btctrack = ["prices/data/*.csv", "ui/assets/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

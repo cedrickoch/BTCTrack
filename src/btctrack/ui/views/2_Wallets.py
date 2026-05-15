@@ -10,10 +10,11 @@ from btctrack.config import get_settings
 from btctrack.db.models import Address, TxIO, Wallet
 from btctrack.db.session import session_scope
 from btctrack.sync import add_wallet, remove_wallet, rename_wallet
+from btctrack.ui.header import render_page_header
 from btctrack.ui.privacy import mask_dataframe, render_sidebar_lock
 
 render_sidebar_lock()
-st.title("Wallets")
+render_page_header("Wallets")
 
 settings = get_settings()
 

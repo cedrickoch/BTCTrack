@@ -6,10 +6,11 @@ from sqlalchemy import select
 
 from btctrack.db.models import Transaction, TxIO, Wallet
 from btctrack.db.session import session_scope
+from btctrack.ui.header import render_page_header
 from btctrack.ui.privacy import mask_dataframe, render_sidebar_lock
 
 render_sidebar_lock()
-st.title("Transactions")
+render_page_header("Transactions")
 
 CLASS_BADGES = {
     "internal": "🔁 internal",

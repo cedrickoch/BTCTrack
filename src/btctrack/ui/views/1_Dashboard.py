@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from btctrack.ledger.performance import daily_series, kpis, per_wallet_balances
+from btctrack.ui.header import render_page_header
 from btctrack.ui.privacy import (
     chart_placeholder,
     fmt_btc,
@@ -15,7 +16,7 @@ from btctrack.ui.privacy import (
 )
 
 render_sidebar_lock()
-st.title("Dashboard")
+render_page_header("Dashboard")
 
 k = kpis()
 ccy = k.base_ccy

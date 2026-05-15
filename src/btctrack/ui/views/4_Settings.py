@@ -6,10 +6,11 @@ import streamlit as st
 
 from btctrack import backup
 from btctrack.sync import get_last_sync, run_sync
+from btctrack.ui.header import render_page_header
 from btctrack.ui.privacy import is_feature_enabled, render_sidebar_lock, set_password
 
 render_sidebar_lock()
-st.title("Settings")
+render_page_header("Settings")
 
 # Flash a one-shot success banner that was set right before an st.rerun().
 _FLASH_KEY = "_btctrack_flash_success"
