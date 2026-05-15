@@ -35,7 +35,16 @@ c4.metric(
 )
 c5.metric(f"Realised P&L ({ccy})", fmt_fiat(k.realised_pnl_fiat, ""))
 
-st.subheader("Portfolio value vs cost basis")
+header_col, scale_col = st.columns([3, 1])
+header_col.subheader("Portfolio value vs cost basis")
+y_scale = scale_col.radio(
+    "Y-axis scale",
+    ("Linear", "Logarithmic"),
+    horizontal=True,
+    label_visibility="collapsed",
+)
+scale_type = "log" if y_scale == "Logarithmic" else "linear"
+
 df = daily_series()
 if df.empty:
     st.info("No external transactions yet. Add a wallet and run a sync.")
@@ -54,7 +63,7 @@ else:
         .mark_line()
         .encode(
             x=alt.X("date:T", title="Date", axis=alt.Axis(format="%b %Y", labelAngle=-45)),
-            y=alt.Y(f"{ccy}:Q", title=ccy),
+            y=alt.Y(f"{ccy}:Q", title=ccy, scale=alt.Scale(type=scale_type)),
             color=alt.Color(
                 "series:N",
                 scale=alt.Scale(
@@ -74,6 +83,7 @@ else:
                 "holdings_btc:Q",
                 title="BTC",
                 axis=alt.Axis(titleColor="#f7931a", labelColor="#f7931a"),
+                scale=alt.Scale(type=scale_type),
             ),
         )
     )
