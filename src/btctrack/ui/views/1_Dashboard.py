@@ -52,7 +52,7 @@ else:
         alt.Chart(long)
         .mark_line()
         .encode(
-            x=alt.X("date:T", title="Date"),
+            x=alt.X("date:T", title="Date", axis=alt.Axis(format="%b %Y", labelAngle=-45)),
             y=alt.Y(f"{ccy}:Q", title=ccy),
             color=alt.Color(
                 "series:N",
