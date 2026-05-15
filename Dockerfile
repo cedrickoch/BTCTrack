@@ -9,6 +9,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
 COPY scripts ./scripts
+COPY .streamlit ./.streamlit
 
 # Build-time price snapshot: download once from Yahoo Finance (no API key)
 # and bake the CSV into the source tree so it ships inside the installed
