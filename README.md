@@ -143,4 +143,3 @@ them on the new host for that machine's Electrum endpoint.
 - Tax export CSV
 - Manual classification override for `unknown` txs
 - Authentication / multi-user
-- Lightning and altcoins
