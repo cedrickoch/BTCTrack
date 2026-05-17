@@ -15,6 +15,13 @@ Realised gains are computed with FIFO lot accounting.
 - Local SQLite storage; everything stays on your machine
 - Single Docker container, LAN-only deployment by default
 
+## Screenshots
+
+- [Dashboard](screenshots/screenshot_dashboard.png)
+- [Wallets](screenshots/screenshot_wallets.png)
+- [Transactions](screenshots/screenshot_transactions.png)
+- [Settings](screenshots/screenshot_settings.png)
+
 ## Stack
 
 Python 3.12 · Streamlit · SQLAlchemy · aiorpcx (Electrum) · bip-utils · bundled BTC/USD + ECB FX price snapshot.
