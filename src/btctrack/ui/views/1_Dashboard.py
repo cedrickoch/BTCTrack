@@ -33,7 +33,14 @@ c4.metric(
     if unlocked and k.open_cost_basis_fiat
     else None,
 )
-c5.metric(f"Realised P&L ({ccy})", fmt_fiat(k.realised_pnl_fiat, ""))
+total_pnl_fiat = k.realised_pnl_fiat + k.unrealised_pnl_fiat
+c5.metric(
+    f"Total P&L ({ccy})",
+    fmt_fiat(total_pnl_fiat, ""),
+    delta=f"{(total_pnl_fiat / k.open_cost_basis_fiat * 100):.2f}%"
+    if unlocked and k.open_cost_basis_fiat
+    else None,
+)
 
 header_col, scale_col = st.columns([3, 1])
 header_col.subheader("Portfolio value vs cost basis")
