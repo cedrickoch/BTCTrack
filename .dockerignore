@@ -1,0 +1,12 @@
+.git
+.gitignore
+.venv
+.pytest_cache
+.ruff_cache
+**/__pycache__
+**/*.pyc
+tests
+examples
+data
+README.md
+.streamlit/secrets.toml

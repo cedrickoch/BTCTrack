@@ -1,31 +1,45 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
-ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    BTCTRACK_DB_PATH=/app/data/btctrack.db
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_COMPILE=1
 
 WORKDIR /app
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 COPY pyproject.toml ./
 COPY src ./src
 COPY scripts ./scripts
-COPY .streamlit ./.streamlit
 
-# Build-time price snapshot: download once from Yahoo Finance (no API key)
-# and bake the CSV into the source tree so it ships inside the installed
-# package. The running container never makes outbound HTTP for prices.
-RUN pip install --upgrade pip && pip install httpx \
+RUN pip install httpx \
  && mkdir -p src/btctrack/prices/data \
  && python scripts/build_price_snapshot.py \
         --output src/btctrack/prices/data/btc_prices.csv \
- && pip install .
+ && pip install . \
+ && find /opt/venv -type d -name __pycache__ -exec rm -rf {} + \
+ && find /opt/venv -type f -name '*.pyc' -delete
+
+
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    BTCTRACK_DB_PATH=/app/data/btctrack.db \
+    PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+COPY .streamlit ./.streamlit
 
 RUN mkdir -p /app/data
 VOLUME ["/app/data"]
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "src/btctrack/ui/app.py", \
+CMD ["streamlit", "run", "/opt/venv/lib/python3.12/site-packages/btctrack/ui/app.py", \
      "--server.address=0.0.0.0", \
      "--server.port=8501", \
      "--server.headless=true", \
