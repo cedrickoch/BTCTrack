@@ -137,12 +137,20 @@ def kpis() -> Kpis:
 
 def daily_series() -> pd.DataFrame:
     """Return a daily DataFrame with columns: date, holdings_btc, value_fiat,
-    cost_basis_fiat, realised_cum_fiat. Empty DF if no external txs."""
+    cost_basis_fiat, realised_cum_fiat, btc_price_fiat. Empty DF if no external
+    txs."""
     settings = get_settings()
     events = sorted(_load_external_events(), key=lambda e: e.block_time)
     if not events:
         return pd.DataFrame(
-            columns=["date", "holdings_btc", "value_fiat", "cost_basis_fiat", "realised_cum_fiat"]
+            columns=[
+                "date",
+                "holdings_btc",
+                "value_fiat",
+                "cost_basis_fiat",
+                "realised_cum_fiat",
+                "btc_price_fiat",
+            ]
         )
 
     start = events[0].block_time.date()
@@ -186,6 +194,7 @@ def daily_series() -> pd.DataFrame:
                 "value_fiat": btc * last_price,
                 "cost_basis_fiat": basis,
                 "realised_cum_fiat": realised_cum,
+                "btc_price_fiat": last_price,
             }
         )
 

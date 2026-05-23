@@ -42,8 +42,7 @@ c5.metric(
     else None,
 )
 
-header_col, scale_col = st.columns([3, 1])
-header_col.subheader("Portfolio value vs cost basis")
+_, scale_col = st.columns([3, 1])
 y_scale = scale_col.radio(
     "Y-axis scale",
     ("Linear", "Logarithmic"),
@@ -58,32 +57,47 @@ if df.empty:
 elif not unlocked:
     chart_placeholder()
 else:
+    # Human-readable legend labels keyed off the raw column names.
+    labels = {
+        "value_fiat": "Portfolio value",
+        "cost_basis_fiat": "Cost of holdings",
+        "btc_price_fiat": "Bitcoin price",
+        "holdings_btc": "Bitcoin held",
+    }
+    # One shared colour scale so the fiat lines and the BTC line collapse into a
+    # single merged legend instead of two.
+    color_scale = alt.Scale(
+        domain=[
+            "Portfolio value",
+            "Cost of holdings",
+            "Bitcoin price",
+            "Bitcoin held",
+        ],
+        range=["#1f77b4", "#888", "#2ca02c", "#f7931a"],
+    )
+    legend = alt.Legend(title=None, orient="top")
+
     long = pd.melt(
         df,
         id_vars=["date"],
-        value_vars=["value_fiat", "cost_basis_fiat"],
+        value_vars=["value_fiat", "cost_basis_fiat", "btc_price_fiat"],
         var_name="series",
         value_name=f"{ccy}",
     )
+    long["series"] = long["series"].map(labels)
     fiat_lines = (
         alt.Chart(long)
         .mark_line()
         .encode(
             x=alt.X("date:T", title="Date", axis=alt.Axis(format="%b %Y", labelAngle=-45)),
             y=alt.Y(f"{ccy}:Q", title=ccy, scale=alt.Scale(type=scale_type)),
-            color=alt.Color(
-                "series:N",
-                scale=alt.Scale(
-                    domain=["value_fiat", "cost_basis_fiat"],
-                    range=["#1f77b4", "#888"],
-                ),
-                legend=alt.Legend(title="Series"),
-            ),
+            color=alt.Color("series:N", scale=color_scale, legend=legend),
         )
     )
+    holdings = df.assign(series=labels["holdings_btc"])
     btc_line = (
-        alt.Chart(df)
-        .mark_line(strokeDash=[4, 3], color="#f7931a")
+        alt.Chart(holdings)
+        .mark_line(strokeDash=[4, 3])
         .encode(
             x="date:T",
             y=alt.Y(
@@ -92,6 +106,7 @@ else:
                 axis=alt.Axis(titleColor="#f7931a", labelColor="#f7931a"),
                 scale=alt.Scale(type=scale_type),
             ),
+            color=alt.Color("series:N", scale=color_scale, legend=legend),
         )
     )
     chart = alt.layer(fiat_lines, btc_line).resolve_scale(y="independent").properties(height=320)
