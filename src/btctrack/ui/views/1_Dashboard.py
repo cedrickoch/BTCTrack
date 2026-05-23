@@ -57,60 +57,75 @@ if df.empty:
 elif not unlocked:
     chart_placeholder()
 else:
-    # Human-readable legend labels keyed off the raw column names.
-    labels = {
-        "value_fiat": "Portfolio value",
-        "cost_basis_fiat": "Cost of holdings",
-        "btc_price_fiat": "Bitcoin price",
-        "holdings_btc": "Bitcoin held",
-    }
-    # One shared colour scale so the fiat lines and the BTC line collapse into a
-    # single merged legend instead of two.
+    # Each line: source column, human-readable label, colour, and a swatch for
+    # the toggle "legend". The first three are fiat (left axis); the last is the
+    # BTC holdings line on its own right axis.
+    series_meta = [
+        ("value_fiat", "Portfolio value", "#1f77b4", "🟦"),
+        ("cost_basis_fiat", "Cost of holdings", "#888", "⬜"),
+        ("btc_price_fiat", "Bitcoin price", "#2ca02c", "🟩"),
+        ("holdings_btc", "Bitcoin held", "#f7931a", "🟧"),
+    ]
     color_scale = alt.Scale(
-        domain=[
-            "Portfolio value",
-            "Cost of holdings",
-            "Bitcoin price",
-            "Bitcoin held",
-        ],
-        range=["#1f77b4", "#888", "#2ca02c", "#f7931a"],
+        domain=[m[1] for m in series_meta],
+        range=[m[2] for m in series_meta],
     )
-    legend = alt.Legend(title=None, orient="top")
 
+    # Custom legend: one toggle per line. Vega-Lite's own legend binding can't do
+    # plain-click toggle (it replaces the selection on each click) nor show which
+    # lines are hidden, so we drive visibility from these toggles and filter the
+    # data — hidden lines disappear entirely and the axes rescale to what remains.
+    st.caption("Show / hide lines")
+    toggle_cols = st.columns(len(series_meta))
+    visible = {
+        label: col.toggle(f"{swatch} {label}", value=True, key=f"line_{key}")
+        for col, (key, label, _color, swatch) in zip(toggle_cols, series_meta)
+    }
+
+    fiat_meta = series_meta[:3]
     long = pd.melt(
         df,
         id_vars=["date"],
-        value_vars=["value_fiat", "cost_basis_fiat", "btc_price_fiat"],
+        value_vars=[m[0] for m in fiat_meta],
         var_name="series",
         value_name=f"{ccy}",
     )
-    long["series"] = long["series"].map(labels)
-    fiat_lines = (
-        alt.Chart(long)
-        .mark_line()
-        .encode(
-            x=alt.X("date:T", title="Date", axis=alt.Axis(format="%b %Y", labelAngle=-45)),
-            y=alt.Y(f"{ccy}:Q", title=ccy, scale=alt.Scale(type=scale_type)),
-            color=alt.Color("series:N", scale=color_scale, legend=legend),
+    long["series"] = long["series"].map({m[0]: m[1] for m in fiat_meta})
+    long = long[long["series"].map(visible)]
+
+    layers = []
+    if not long.empty:
+        layers.append(
+            alt.Chart(long)
+            .mark_line()
+            .encode(
+                x=alt.X("date:T", title="Date", axis=alt.Axis(format="%b %Y", labelAngle=-45)),
+                y=alt.Y(f"{ccy}:Q", title=ccy, scale=alt.Scale(type=scale_type)),
+                color=alt.Color("series:N", scale=color_scale, legend=None),
+            )
         )
-    )
-    holdings = df.assign(series=labels["holdings_btc"])
-    btc_line = (
-        alt.Chart(holdings)
-        .mark_line(strokeDash=[4, 3])
-        .encode(
-            x="date:T",
-            y=alt.Y(
-                "holdings_btc:Q",
-                title="BTC",
-                axis=alt.Axis(titleColor="#f7931a", labelColor="#f7931a"),
-                scale=alt.Scale(type=scale_type),
-            ),
-            color=alt.Color("series:N", scale=color_scale, legend=legend),
+    if visible["Bitcoin held"]:
+        holdings = df.assign(series="Bitcoin held")
+        layers.append(
+            alt.Chart(holdings)
+            .mark_line(strokeDash=[4, 3])
+            .encode(
+                x="date:T",
+                y=alt.Y(
+                    "holdings_btc:Q",
+                    title="BTC",
+                    axis=alt.Axis(titleColor="#f7931a", labelColor="#f7931a"),
+                    scale=alt.Scale(type=scale_type),
+                ),
+                color=alt.Color("series:N", scale=color_scale, legend=None),
+            )
         )
-    )
-    chart = alt.layer(fiat_lines, btc_line).resolve_scale(y="independent").properties(height=320)
-    st.altair_chart(chart, width="stretch")
+
+    if layers:
+        chart = alt.layer(*layers).resolve_scale(y="independent").properties(height=320)
+        st.altair_chart(chart, width="stretch")
+    else:
+        st.info("All lines hidden — toggle one on above to show the chart.")
 
 st.subheader("Holdings per wallet")
 balances = per_wallet_balances()

@@ -93,3 +93,52 @@ def test_chart_spec_uses_friendly_labels():
     # The layered spec compiles to a Vega-Lite dict without error.
     spec = alt.layer(fiat_lines, btc_line).resolve_scale(y="independent").to_dict()
     assert spec["layer"]
+
+
+def test_hidden_series_are_filtered_out():
+    """A line is hidden by dropping its rows from the chart data (so the axes
+    rescale), keyed off the per-line toggle. Hiding one line must leave the other
+    lines' data untouched."""
+    _seed_buy()
+    df = daily_series()
+    ccy = "CHF"
+
+    long = pd.melt(
+        df,
+        id_vars=["date"],
+        value_vars=["value_fiat", "cost_basis_fiat", "btc_price_fiat"],
+        var_name="series",
+        value_name=ccy,
+    )
+    long["series"] = long["series"].map(LABELS)
+
+    # Toggle "Bitcoin price" off; the other two fiat lines stay on.
+    visible = {
+        "Portfolio value": True,
+        "Cost of holdings": True,
+        "Bitcoin price": False,
+        "Bitcoin held": True,
+    }
+    filtered = long[long["series"].map(visible)]
+
+    assert set(filtered["series"].unique()) == {"Portfolio value", "Cost of holdings"}
+    # Independent toggles: each still-visible line keeps every one of its rows.
+    assert (filtered["series"] == "Portfolio value").sum() == len(df)
+    assert (filtered["series"] == "Cost of holdings").sum() == len(df)
+
+
+def test_all_lines_hidden_yields_no_data():
+    """With every toggle off there are no rows to plot — the view shows an info
+    message instead of an empty chart."""
+    _seed_buy()
+    df = daily_series()
+    long = pd.melt(
+        df,
+        id_vars=["date"],
+        value_vars=["value_fiat", "cost_basis_fiat", "btc_price_fiat"],
+        var_name="series",
+        value_name="CHF",
+    )
+    long["series"] = long["series"].map(LABELS)
+    none_visible = dict.fromkeys(LABELS.values(), False)
+    assert long[long["series"].map(none_visible)].empty
